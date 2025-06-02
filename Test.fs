@@ -99,7 +99,7 @@ let TestFunctionSourceAndDSL (source: string) (dsl: string) =
             let printer = Printer()
             printfn $"Original function (cost: {cost}):\n%s{printer.PrintFunction func}"
             printfn $"CSE-optimized function (cost: {cost'}):\n%s{printer.PrintFunction func'}"
-            printfn $"Equality-saturated function (cost: {cost''}):\n%s{printer.PrintFunction func''}"
+            printfn $"Equality-saturation performed on CSE-optimized function (cost: {cost''}):\n%s{printer.PrintFunction func''}"
         | Error errorMsg -> Assert.Fail $"Parsing DSL function failed: %s{errorMsg}"
     | Error errorMsg -> Assert.Fail $"Parsing shader source failed: %s{errorMsg}"
 
