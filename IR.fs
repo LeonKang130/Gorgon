@@ -4,6 +4,7 @@
 type UnaryOp =
     | Square
     | Inverse
+    | Exponent
 
 [<Struct>]
 type BinaryOp =
@@ -11,6 +12,9 @@ type BinaryOp =
     | Subtract
     | Multiply
     | Divide
+    | Min
+    | Max
+    | Power
 
 [<Struct>]
 type TernaryOp = | FusedMultiplyAdd

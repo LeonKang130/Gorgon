@@ -1,0 +1,1 @@
+﻿(Subtract (Divide (FusedMultiplyAdd (Variable "x") (FusedMultiplyAdd (Literal 0.15) (Variable "x") (Literal 0.05)) (Literal 0.004)) (FusedMultiplyAdd (Variable "x") (FusedMultiplyAdd (Literal 0.15) (Variable "x") (Literal 0.5)) (Literal 0.06))) (Literal 0.066667))

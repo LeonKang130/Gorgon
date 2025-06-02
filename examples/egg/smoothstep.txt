@@ -1,0 +1,1 @@
+﻿(Subtract (Multiply (Square (Divide (Subtract (Variable "x") (Variable "a")) (Subtract (Variable "b") (Variable "a")))) (Literal 3.0)) (Multiply (Square (Divide (Subtract (Variable "x") (Variable "a")) (Subtract (Variable "b") (Variable "a")))) (Multiply (Literal 2.0) (Divide (Subtract (Variable "x") (Variable "a")) (Subtract (Variable "b") (Variable "a"))))))

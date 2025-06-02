@@ -1,6 +1,7 @@
 ﻿module Gorgon.CSE
 
 open Gorgon.IR
+open System
 
 type ENode =
     | ELiteral of value: float32
@@ -52,7 +53,7 @@ type DAG() =
         for stmt in func.body do
             match stmt with
             | Return _ -> failwith "Return statements are not allowed in the body of a function"
-            | Assign(name, value) -> dag.AddBinding(name, dag.AddExpr(value)) |> ignore
+            | Assign(name, value) -> dag.AddBinding(name, dag.AddExpr(value))
         match func.ret with
         | Assign _ -> failwith "Function must end with a return statement"
         | Return expr -> 
@@ -81,6 +82,7 @@ type DAG() =
                             if value = 0.0f then
                                 failwith "Division by zero"
                             Literal (1.0f / value)
+                        | Exponent -> Literal (MathF.Exp(value))
                     | expr' ->
                         let name = this.FreshVar()
                         localLookup <- localLookup.Add(eid, name)
@@ -97,6 +99,9 @@ type DAG() =
                             if b = 0.0f then
                                 failwith "Division by zero"
                             Literal (a / b)
+                        | Min -> Literal (MathF.Min(a, b))
+                        | Max -> Literal (MathF.Max(a, b))
+                        | Power -> Literal (MathF.Pow(a, b))
                     | left', right' ->
                         let name = this.FreshVar()
                         localLookup <- localLookup.Add(eid, name)

@@ -1,0 +1,1 @@
+﻿(Min (Literal 1.0) (Max (Literal 0.0) (Divide (Multiply (Variable "x") (FusedMultiplyAdd (Literal 2.51) (Variable "x") (Literal 0.03))) (FusedMultiplyAdd (Variable "x") (FusedMultiplyAdd (Literal 2.43) (Variable "x") (Literal 0.59)) (Literal 0.14)))))

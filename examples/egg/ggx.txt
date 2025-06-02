@@ -1,0 +1,1 @@
+﻿(Divide (Square (Variable "alpha")) (Multiply (Square (FusedMultiplyAdd (Square (Variable "cos_theta")) (Subtract (Square (Variable "alpha")) (Literal 1.0)) (Literal 1.0))) (Literal 3.141593)))

@@ -20,11 +20,17 @@ type Printer(indent: int) =
             | Literal value -> value.ToString()
             | Variable name -> name
             | Unary (op, e) ->
-                let opStr = match op with Square -> "sqr" | Inverse -> "inv"
+                let opStr = match op with Square -> "sqr" | Inverse -> "inv" | Exponent -> "exp"
                 $"{opStr}({this.PrintExpr e})"
             | Binary (op, left, right) ->
-                let opStr = match op with Add -> "+" | Subtract -> "-" | Multiply -> "*" | Divide -> "/"
-                $"({this.PrintExpr left} {opStr} {this.PrintExpr right})"
+                match op with
+                | Add -> $"({this.PrintExpr left} + {this.PrintExpr right})"
+                | Subtract -> $"({this.PrintExpr left} - {this.PrintExpr right})"
+                | Multiply -> $"({this.PrintExpr left} * {this.PrintExpr right})"
+                | Divide -> $"({this.PrintExpr left} / {this.PrintExpr right})"
+                | Min -> $"min({this.PrintExpr left}, {this.PrintExpr right})"
+                | Max -> $"max({this.PrintExpr left}, {this.PrintExpr right})"
+                | Power -> $"pow({this.PrintExpr left}, {this.PrintExpr right})"
             | Ternary (op, e1, e2, e3) ->
             let opStr = match op with FusedMultiplyAdd -> "fma"
             $"{opStr}({this.PrintExpr e1}, {this.PrintExpr e2}, {this.PrintExpr e3})"
@@ -45,6 +51,7 @@ let rules = """
 ; Unary operation rules
 (rewrite (Multiply a a) (Square a))
 (rewrite (Multiply a (Inverse b)) (Divide a b))
+(rewrite (Multiply (Exponent a) (Exponent b)) (Exponent (Multiply a b)))
 ; Binary operation rules
 (rewrite (Add a b) (Add b a))
 (rewrite (Multiply a b) (Multiply b a))
@@ -63,6 +70,11 @@ let rules = """
 (rewrite (Square (Literal a)) (Literal (* a a)))
 (rewrite (Inverse (Literal a)) (Literal (/ 1.0 a)))
 (rewrite (FusedMultiplyAdd (Literal a) (Literal b) (Literal c)) (Literal (+ (* a b) c)))
+(rewrite (Subtract a a) (Literal 0.0))
+(rewrite (Divide a (Literal 1.0)) a)
+(rewrite (Add a (Literal 0.0)) a)
+(rewrite (Multiply a (Literal 1.0)) a)
+(rewrite (Multiply a (Literal 0.0)) (Literal 0.0))
 """
 
 type DSLPrinter(costModel: CostModel) =
@@ -72,10 +84,14 @@ type DSLPrinter(costModel: CostModel) =
     (Variable String :cost {costModel.VariableCost})
     (Square Expr :cost {costModel.UnaryCost Square})
     (Inverse Expr :cost {costModel.UnaryCost Inverse})
+    (Exponent Expr :cost {costModel.UnaryCost Exponent})
     (Add Expr Expr :cost {costModel.BinaryCost Add})
     (Subtract Expr Expr :cost {costModel.BinaryCost Subtract})
     (Multiply Expr Expr :cost {costModel.BinaryCost Multiply})
     (Divide Expr Expr :cost {costModel.BinaryCost Divide})
+    (Min Expr Expr :cost {costModel.BinaryCost Min})
+    (Max Expr Expr :cost {costModel.BinaryCost Max})
+    (Power Expr Expr :cost {costModel.BinaryCost Power})
     (FusedMultiplyAdd Expr Expr Expr :cost {costModel.TernaryCost FusedMultiplyAdd}))"""
     let mutable bindings = Map.empty
     let mutable counter = 0
@@ -95,10 +111,18 @@ type DSLPrinter(costModel: CostModel) =
                 | Variable name -> $"(Variable \"{name}\")"
                 | _ -> name
             | Unary (op, e) ->
-                let opStr = match op with Square -> "Square" | Inverse -> "Inverse"
+                let opStr = match op with Square -> "Square" | Inverse -> "Inverse" | Exponent -> "Exponent"
                 $"({opStr} {this.PrintExpr e})"
             | Binary (op, left, right) ->
-                let opStr = match op with Add -> "Add" | Subtract -> "Subtract" | Multiply -> "Multiply" | Divide -> "Divide"
+                let opStr =
+                    match op with
+                    | Add -> "Add"
+                    | Subtract -> "Subtract"
+                    | Multiply -> "Multiply"
+                    | Divide -> "Divide"
+                    | Min -> "Min"
+                    | Max -> "Max"
+                    | Power -> "Power"
                 $"({opStr} {this.PrintExpr left} {this.PrintExpr right})"
             | Ternary (op, e1, e2, e3) ->
                 let opStr = match op with FusedMultiplyAdd -> "FusedMultiplyAdd"

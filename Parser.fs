@@ -15,7 +15,7 @@ let private betweenQuotes p =
     between (str_ws "\"") (str_ws "\"") p
 
 let private pIdentifier: Parser<string, unit> =
-    many1Satisfy2 Char.IsLetter Char.IsLetterOrDigit .>> spaces
+    many1Satisfy2 Char.IsLetter (fun c -> Char.IsLetterOrDigit c || c = '_') .>> spaces
 
 module ShaderParser =
     let private pExpr, pExprRef = createParserForwardedToRef<Expr, unit> ()
@@ -29,9 +29,21 @@ module ShaderParser =
     let private pUnary: Parser<Expr, unit> =
         let unary (name: string) (op: UnaryOp) =
             attempt (str_ws name >>. betweenParens pExpr |>> (fun expr -> Unary(op, expr)))
+        choice [
+            unary "sqr" Square
+            unary "inv" Inverse 
+            unary "exp" Exponent
+        ]
 
-        choice [ unary "sqr" Square; unary "inv" Inverse ]
-
+    let private pBinary: Parser<Expr, unit> =
+        let binary (name: string) (op: BinaryOp) =
+            attempt (str_ws name >>. betweenParens ((pExpr .>> str_ws ",") .>>. pExpr |>> (fun (left, right) -> Binary(op, left, right))))
+        choice [
+            binary "min" Min
+            binary "max" Max
+            binary "pow" Power
+        ]
+    
     let private pTernary: Parser<Expr, unit> =
         attempt (
             str_ws "fma"
@@ -47,6 +59,7 @@ module ShaderParser =
 
     opp.TermParser <- choice [
         pTernary
+        pBinary
         pUnary
         pLiteral
         pVariable
@@ -95,6 +108,7 @@ module DSLParser =
         choice [
             str_ws "Square" >>% Square
             str_ws "Inverse" >>% Inverse
+            str_ws "Exponent" >>% Exponent
         ]
     
     let private pBinaryOp: Parser<BinaryOp, unit> =
@@ -103,6 +117,9 @@ module DSLParser =
             str_ws "Subtract" >>% Subtract
             str_ws "Multiply" >>% Multiply
             str_ws "Divide" >>% Divide
+            str_ws "Min" >>% Min
+            str_ws "Max" >>% Max
+            str_ws "Power" >>% Power
         ]
     
     let private pTernaryOp: Parser<TernaryOp, unit> =
@@ -119,7 +136,7 @@ module DSLParser =
     let private pTernary: Parser<Expr, unit> =
         pipe4 pTernaryOp pExpr pExpr pExpr (fun op expr1 expr2 expr3 -> Ternary(op, expr1, expr2, expr3))
     
-    pExprRef.Value <- betweenParens (choice [
+    pExprRef.Value <- spaces >>. betweenParens (choice [
         pTernary
         pBinary
         pUnary
