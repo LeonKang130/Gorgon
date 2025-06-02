@@ -2,18 +2,20 @@
 
 open Gorgon.IR
 
-type private ENode =
+type ENode =
     | ELiteral of value: float32
     | EVariable of name: string
     | EUnary of op: UnaryOp * expr: int
     | EBinary of op: BinaryOp * left: int * right: int
     | ETernary of op: TernaryOp * expr1: int * expr2: int * expr3: int
 
-type private DAG() =
+type DAG() =
     let mutable classes = ResizeArray<ENode>()
     let mutable memo = Map.empty<ENode, int>
     let mutable localBindings = Map.empty<string, int>
     let mutable counter = 0
+    let mutable args = Set.empty<string>
+    member this.Args(): List<string> = List.ofSeq args
     member this.FreshVar() : string =
         let name = $"v{counter}"
         counter <- counter + 1
@@ -33,6 +35,7 @@ type private DAG() =
             match localBindings.TryFind name with
             | Some eid -> eid
             | None ->
+                args <- args.Add name
                 this.AddENode(EVariable name)
         | Unary (op, expr) ->
             this.AddENode(EUnary(op, this.AddExpr(expr)))
@@ -42,7 +45,7 @@ type private DAG() =
             this.AddENode(ETernary(op, this.AddExpr(expr1), this.AddExpr(expr2), this.AddExpr(expr3)))
     member this.AddBinding(name: string, eid: int) =
         localBindings <- localBindings.Add(name, eid)
-    static member Create(func: Function) : DAG * int =
+    static member FromFunction(func: Function) : DAG * int =
         let dag = DAG()
         for arg in func.args do
             dag.AddENode(EVariable arg) |> ignore
@@ -55,6 +58,10 @@ type private DAG() =
         | Return expr -> 
             let root = dag.AddExpr(expr)
             dag, root
+    static member FromExpr(expr: Expr) : DAG * int =
+        let dag = DAG()
+        let root = dag.AddExpr(expr)
+        dag, root
     member this.Extract(root: int) : Stmt list * Stmt =
         let stmts = ResizeArray<Stmt>()
         let mutable localLookup = Map.empty<int, string>
@@ -109,6 +116,6 @@ type private DAG() =
         List.ofArray(stmts.ToArray()), Return expr
 
 let EliminateCommonSubexpressions(func: Function) : Function =
-    let dag, root = DAG.Create func
+    let dag, root = DAG.FromFunction func
     let body, ret = dag.Extract root
     { name = func.name; args = func.args; body = body; ret = ret }

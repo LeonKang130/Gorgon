@@ -32,6 +32,7 @@ type Function =
       body: Stmt list
       ret: Stmt }
 
+
 type CostModel =
     { LiteralCost: int
       VariableCost: int
