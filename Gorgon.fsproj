@@ -10,7 +10,6 @@
     <Compile Include="Parser.fs" />
     <Compile Include="Printer.fs" />
     <Compile Include="CSE.fs" />
-    <Compile Include="Fold.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

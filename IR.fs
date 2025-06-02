@@ -51,3 +51,20 @@ type CostModel =
           TernaryCost =
             function
             | _ -> 1 }
+
+let rec private EvaluateExprCost(expr: Expr, costModel: CostModel): int =
+    match expr with
+    | Literal _ -> costModel.LiteralCost
+    | Variable _ -> costModel.VariableCost
+    | Unary (op, e) -> costModel.UnaryCost op + EvaluateExprCost(e, costModel)
+    | Binary (op, left, right) ->
+        costModel.BinaryCost op + EvaluateExprCost(left, costModel) + EvaluateExprCost(right, costModel)
+    | Ternary (op, e1, e2, e3) ->
+        costModel.TernaryCost op + EvaluateExprCost(e1, costModel) + EvaluateExprCost(e2, costModel) + EvaluateExprCost(e3, costModel)
+
+let EvaluateFunctionCost(func: Function, costModel: CostModel): int =
+    let evalStmt (stmt: Stmt): int =
+        match stmt with
+        | Assign (_, value) -> EvaluateExprCost(value, costModel)
+        | Return expr -> EvaluateExprCost(expr, costModel)
+    List.sumBy evalStmt func.body + evalStmt func.ret

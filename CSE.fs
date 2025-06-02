@@ -1,105 +1,114 @@
 ﻿module Gorgon.CSE
 
 open Gorgon.IR
-open System
-open System.Collections.Generic
 
-type EClassId = int
-
-type ENode =
+type private ENode =
     | ELiteral of value: float32
     | EVariable of name: string
-    | EUnary of op: UnaryOp * expr: EClassId
-    | EBinary of op: BinaryOp * left: EClassId * right: EClassId
-    | ETernary of op: TernaryOp * expr1: EClassId * expr2: EClassId * expr3: EClassId
+    | EUnary of op: UnaryOp * expr: int
+    | EBinary of op: BinaryOp * left: int * right: int
+    | ETernary of op: TernaryOp * expr1: int * expr2: int * expr3: int
 
-type EClass = {
-    id: EClassId
-    mutable nodes: Set<ENode>
-    mutable parents: Set<EClassId>
-}
-
-type EGraph() =
-    let mutable nextId = 0
-    let mutable classes = Dictionary<EClassId, EClass>()
-    let mutable memo = Dictionary<ENode, EClassId>()
-    let mutable unionFind = Dictionary<EClassId, EClassId>()
-    let mutable localBindings = Dictionary<string, EClassId>()
-    override this.ToString() =
-        let sb = System.Text.StringBuilder()
-        for KeyValue(eid, eclass) in classes do
-            sb.AppendLine($"EClass {eid}({this.Find eid}):") |> ignore
-            for node in eclass.nodes do
-                sb.AppendLine($"  {node}") |> ignore
-            if eclass.parents.Count > 0 then
-                let parents = String.Join(", ", eclass.parents)
-                sb.AppendLine($"  Parents: {parents}") |> ignore
-        sb.ToString()
-    member this.Find(eid: EClassId) : EClassId =
-        match unionFind.TryGetValue(eid) with
-        | true, parent when parent <> eid ->
-            let root = this.Find(parent)
-            unionFind[eid] <- root
-            root
-        | _ ->
-            unionFind[eid] <- eid
+type private DAG() =
+    let mutable classes = ResizeArray<ENode>()
+    let mutable memo = Map.empty<ENode, int>
+    let mutable localBindings = Map.empty<string, int>
+    let mutable counter = 0
+    member this.FreshVar() : string =
+        let name = $"v{counter}"
+        counter <- counter + 1
+        name
+    member this.AddENode(enode: ENode) : int =
+        match memo.TryFind enode with
+        | Some eid -> eid
+        | None ->
+            let eid = classes.Count
+            classes.Add(enode)
+            memo <- memo.Add(enode, eid)
             eid
-    member this.Union(a: EClassId, b: EClassId) =
-        let rootA = this.Find(a)
-        let rootB = this.Find(b)
-        if rootA <> rootB then
-            unionFind[rootB] <- rootA
-    member this.AddENode(enode: ENode): EClassId =
-        match enode with
-        | EVariable name when localBindings.ContainsKey name ->
-            localBindings[name]
-        | _ ->
-            let canonical =
-                match enode with
-                | ELiteral _ | EVariable _ -> enode
-                | EUnary(op, expr) -> EUnary(op, this.Find(expr))
-                | EBinary(op, left, right) ->
-                    EBinary(op, this.Find(left), this.Find(right))
-                | ETernary(op, expr1, expr2, expr3) ->
-                    ETernary(op, this.Find(expr1), this.Find(expr2), this.Find(expr3))
-            match memo.TryGetValue(canonical) with
-            | true, eid -> this.Find eid
-            | _ ->
-                let eid = nextId
-                nextId <- nextId + 1
-                let eclass = {
-                    id = eid
-                    nodes = Set.singleton canonical
-                    parents = Set.empty
-                }
-                classes[eid] <- eclass
-                memo[canonical] <- eid
-                unionFind[eid] <- eid
-                eid
-    member this.AddExpr(expr: Expr) : EClassId =
+    member this.AddExpr(expr: Expr) : int =
         match expr with
-        | Literal value ->
-            this.AddENode(ELiteral value)
+        | Literal value -> this.AddENode(ELiteral value)
         | Variable name ->
-            this.AddENode(EVariable name)
+            match localBindings.TryFind name with
+            | Some eid -> eid
+            | None ->
+                this.AddENode(EVariable name)
         | Unary (op, expr) ->
             this.AddENode(EUnary(op, this.AddExpr(expr)))
         | Binary (op, left, right) ->
             this.AddENode(EBinary(op, this.AddExpr(left), this.AddExpr(right)))
         | Ternary (op, expr1, expr2, expr3) ->
-            this.AddENode(ETernary(op, this.AddExpr(expr1), this.AddExpr(expr2),this.AddExpr(expr3)))
-    member this.AddBinding(name: string, eid: EClassId) =
-        localBindings[name] <- eid
-    static member Create(func: Function): EGraph * EClassId =
-        let egraph = EGraph()
+            this.AddENode(ETernary(op, this.AddExpr(expr1), this.AddExpr(expr2), this.AddExpr(expr3)))
+    member this.AddBinding(name: string, eid: int) =
+        localBindings <- localBindings.Add(name, eid)
+    static member Create(func: Function) : DAG * int =
+        let dag = DAG()
         for arg in func.args do
-            egraph.AddENode(EVariable arg) |> ignore
+            dag.AddENode(EVariable arg) |> ignore
         for stmt in func.body do
             match stmt with
-            | Assign(name, value) -> egraph.AddBinding(name, egraph.AddExpr(value))
-            | _ -> failwith "Only assignment statements are allowed in the body"
+            | Return _ -> failwith "Return statements are not allowed in the body of a function"
+            | Assign(name, value) -> dag.AddBinding(name, dag.AddExpr(value)) |> ignore
         match func.ret with
-        | Return expr -> egraph, egraph.AddExpr(expr)
-        | _ -> failwith "Function must end with a return statement"
-    member this.Extract(root: EClassId, leaves: Set<ENode>, costModel: CostModel): Stmt list * Stmt =
-        [], Return (Literal 0.0f)
+        | Assign _ -> failwith "Function must end with a return statement"
+        | Return expr -> 
+            let root = dag.AddExpr(expr)
+            dag, root
+    member this.Extract(root: int) : Stmt list * Stmt =
+        let stmts = ResizeArray<Stmt>()
+        let mutable localLookup = Map.empty<int, string>
+        let rec traverse(eid: int) =
+            match localLookup.TryFind eid with
+            | Some name -> Variable name
+            | None ->
+                match classes[eid] with
+                | ELiteral value -> Literal value
+                | EVariable name -> Variable name
+                | EUnary(op, expr) ->
+                    match traverse expr with
+                    | Literal value ->
+                        match op with
+                        | Square -> Literal (value * value)
+                        | Inverse ->
+                            if value = 0.0f then
+                                failwith "Division by zero"
+                            Literal (1.0f / value)
+                    | expr' ->
+                        let name = this.FreshVar()
+                        localLookup <- localLookup.Add(eid, name)
+                        stmts.Add(Assign (name, Unary(op, expr')))
+                        Variable name
+                | EBinary(op, left, right) ->
+                    match traverse left, traverse right with
+                    | Literal a, Literal b ->
+                        match op with
+                        | Add -> Literal (a + b)
+                        | Subtract -> Literal (a - b)
+                        | Multiply -> Literal (a * b)
+                        | Divide ->
+                            if b = 0.0f then
+                                failwith "Division by zero"
+                            Literal (a / b)
+                    | left', right' ->
+                        let name = this.FreshVar()
+                        localLookup <- localLookup.Add(eid, name)
+                        stmts.Add(Assign (name, Binary(op, left', right')))
+                        Variable name
+                | ETernary(op, expr1, expr2, expr3) ->
+                    match traverse expr1, traverse expr2, traverse expr3 with
+                    | Literal a, Literal b, Literal c ->
+                        match op with
+                        | FusedMultiplyAdd -> Literal (a * b + c)
+                    | _ ->
+                        let name = this.FreshVar()
+                        localLookup <- localLookup.Add(eid, name)
+                        stmts.Add(Assign (name, Ternary(op, traverse expr1, traverse expr2, traverse expr3)))
+                        Variable name
+        let expr = traverse root
+        List.ofArray(stmts.ToArray()), Return expr
+
+let EliminateCommonSubexpressions(func: Function) : Function =
+    let dag, root = DAG.Create func
+    let body, ret = dag.Extract root
+    { name = func.name; args = func.args; body = body; ret = ret }

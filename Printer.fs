@@ -2,7 +2,6 @@
 
 open Gorgon.IR
 open System
-open System.Collections.Generic
 
 type IPrinter =
     abstract member PrintExpr : Expr -> string
