@@ -33,7 +33,7 @@ type Printer(indent: int) =
             | Assign (name, value) -> $"let {name} = {this.PrintExpr value};"
             | Return expr -> $"return {this.PrintExpr expr};"
         member this.PrintFunction func =
-            let args = String.Join(", ", func.args)
+            let args = String.Join(", ", List.map (fun arg -> $"{arg}: float") func.args)
             let body =
                 func.body @ [func.ret]
                 |> List.map this.PrintStmt
