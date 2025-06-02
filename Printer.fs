@@ -2,6 +2,7 @@
 
 open Gorgon.IR
 open System
+open System.Collections.Generic
 
 type IPrinter =
     abstract member PrintExpr : Expr -> string
@@ -40,9 +41,33 @@ type Printer(indent: int) =
                 |> List.map (fun s -> indentation + s)
             $"func {func.name}({args}) -> float {{\n{String.Join('\n', body)}\n}}"
 
+[<Literal>]
+let rules = """
+; Unary operation rules
+(rewrite (Multiply a a) (Square a))
+(rewrite (Multiply a (Inverse b)) (Divide a b))
+; Binary operation rules
+(rewrite (Add a b) (Add b a))
+(rewrite (Multiply a b) (Multiply b a))
+(rewrite (Add a (Add b c)) (Add (Add a b) c))
+(rewrite (Multiply a (Multiply b c)) (Multiply (Multiply a b) c))
+(rewrite (Multiply a (Add b c)) (Add (Multiply a b) (Multiply a c)))
+(rewrite (Add (Multiply a b) (Multiply a c)) (Multiply a (Add b c)))
+; Ternary operation rules
+(rewrite (FusedMultiplyAdd a b c) (Add (Multiply a b) c))
+(rewrite (Add (Multiply a b) c) (FusedMultiplyAdd a b c))
+; Constant folding rules
+(rewrite (Add (Literal a) (Literal b)) (Literal (+ a b)))
+(rewrite (Subtract (Literal a) (Literal b)) (Literal (- a b)))
+(rewrite (Multiply (Literal a) (Literal b)) (Literal (* a b)))
+(rewrite (Divide (Literal a) (Literal b)) (Literal (/ a b)))
+(rewrite (Square (Literal a)) (Literal (* a a)))
+(rewrite (Inverse (Literal a)) (Literal (/ 1.0 a)))
+(rewrite (FusedMultiplyAdd (Literal a) (Literal b) (Literal c)) (Literal (+ (* a b) c)))
+"""
+
 type DSLPrinter(costModel: CostModel) =
-    let definitions =
-        $"""
+    let definitions = $"""
 (datatype Expr
     (Literal f64 :cost {costModel.LiteralCost})
     (Variable String :cost {costModel.VariableCost})
@@ -52,9 +77,13 @@ type DSLPrinter(costModel: CostModel) =
     (Subtract Expr Expr :cost {costModel.BinaryCost Subtract})
     (Multiply Expr Expr :cost {costModel.BinaryCost Multiply})
     (Divide Expr Expr :cost {costModel.BinaryCost Divide})
-    (FusedMultiplyAdd Expr Expr Expr :cost {costModel.TernaryCost FusedMultiplyAdd}))
-"""
-    let mutable localBindings = Set.empty
+    (FusedMultiplyAdd Expr Expr Expr :cost {costModel.TernaryCost FusedMultiplyAdd}))"""
+    let mutable bindings = Map.empty
+    let mutable counter = 0
+    member this.FreshVar() =
+        let name = $"v{counter}"
+        counter <- counter + 1
+        name
     member this.PrintExpr = (this :> IPrinter).PrintExpr
     member this.PrintStmt = (this :> IPrinter).PrintStmt
     member this.PrintFunction = (this :> IPrinter).PrintFunction
@@ -63,8 +92,9 @@ type DSLPrinter(costModel: CostModel) =
             match expr with
             | Literal value -> $"(Literal %f{value})"
             | Variable name ->
-                if localBindings.Contains name then name
-                else $"(Variable \"{name}\")"
+                match bindings[name] with
+                | Variable name -> $"(Variable \"{name}\")"
+                | _ -> name
             | Unary (op, e) ->
                 let opStr = match op with Square -> "Square" | Inverse -> "Inverse"
                 $"({opStr} {this.PrintExpr e})"
@@ -77,9 +107,20 @@ type DSLPrinter(costModel: CostModel) =
         member this.PrintStmt stmt =
             match stmt with
             | Assign (name, value) ->
-                localBindings <- localBindings.Add name
+                bindings <- Map.add name value bindings
                 $"(let {name} {this.PrintExpr value})"
-            | Return expr -> $"(extract {this.PrintExpr expr})"
+            | Return expr ->
+                match expr with
+                | Literal _ | Variable _ ->
+                    $"(run 10)\n(extract {this.PrintExpr expr})"
+                | _ ->
+                    let mutable freshVar = this.FreshVar()
+                    while bindings.Keys.Contains(freshVar) do
+                        freshVar <- this.FreshVar()
+                    bindings <- Map.add freshVar expr bindings
+                    $"(let {freshVar} {this.PrintExpr expr})\n(run 10)\n(query-extract {freshVar})"
         member this.PrintFunction func =
-            localBindings <- Set.empty
-            definitions + String.Join('\n', List.map this.PrintStmt (func.body @ [func.ret])) + "\n(run 10)"            
+            bindings <- Map.ofList (func.args |> List.map (fun arg -> arg, Variable arg))
+            let body = String.Join('\n', List.map this.PrintStmt func.body)
+            let ret = this.PrintStmt func.ret
+            $"{definitions.Trim()}\n{rules.Trim()}\n{body}\n{ret}"

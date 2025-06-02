@@ -44,10 +44,10 @@ type CostModel =
           VariableCost = 0
           UnaryCost =
             function
-            | _ -> 2
+            | _ -> 1
           BinaryCost =
             function
-            | _ -> 2
+            | _ -> 1
           TernaryCost =
             function
-            | _ -> 2 }
+            | _ -> 1 }

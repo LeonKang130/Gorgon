@@ -1,9 +1,8 @@
 ﻿open FParsec
 open Gorgon.IR
 open Gorgon.Parser
-open Gorgon.Fold
-open Gorgon.CSE
 open Gorgon.Printer
+open System.IO
 
 [<Literal>]
 let sourceCode = """
@@ -19,14 +18,8 @@ func test(x: float, y: float) -> float {
 let main _ =
     match run pFunction sourceCode with
     | Success (func, _, _) ->
-        let printer = Printer()
-        printfn $"Parsed function:\n%A{func}"
-        let optimizedFunc = func |> FoldConstantsInFunction
-        printfn $"Optimized function:\n%A{printer.PrintFunction optimizedFunc}"
-        let egraph, root = EGraph.Create optimizedFunc
-        printfn $"EGraph:\n%A{egraph}"
-        let eggPrinter = DSLPrinter(CostModel.Default)
-        printfn $"Egg representation:\n%s{eggPrinter.PrintFunction optimizedFunc}"
+        let printer = DSLPrinter(CostModel.Default)
+        File.WriteAllText("dsl.txt", printer.PrintFunction func)
     | Failure (errorMsg, _, _) ->
         printfn $"Parsing failed: %s{errorMsg}"
     0
