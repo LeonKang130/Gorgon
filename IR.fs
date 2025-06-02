@@ -49,13 +49,17 @@ type CostModel =
           VariableCost = 0
           UnaryCost =
             function
-            | _ -> 1
+            | Square -> 1
+            | Inverse -> 4
+            | Exponent -> 15
           BinaryCost =
             function
-            | _ -> 1
+            | Add | Subtract | Multiply | Min | Max -> 1
+            | Divide -> 8
+            | Power -> 25
           TernaryCost =
             function
-            | _ -> 1 }
+            | FusedMultiplyAdd -> 1 }
 
 let rec private EvaluateExprCost(expr: Expr, costModel: CostModel): int =
     match expr with

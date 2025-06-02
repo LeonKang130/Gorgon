@@ -30,7 +30,7 @@ func schlick_fresnel(n0: float, n1: float, cos_theta: float) -> float {
 
 [<Literal>]
 let SchlickFresnelDSL = """
-(FusedMultiplyAdd (Subtract (Literal 1.0) (Variable "cos_theta")) (Multiply (Square (Square (Subtract (Literal 1.0) (Variable "cos_theta")))) (Subtract (Literal 1.0) (Divide (Square (Subtract (Variable "n0") (Variable "n1"))) (Square (Add (Variable "n0") (Variable "n1")))))) (Divide (Square (Subtract (Variable "n0") (Variable "n1"))) (Square (Add (Variable "n0") (Variable "n1")))))
+(FusedMultiplyAdd (Subtract (Literal 1.0) (Variable "cos_theta")) (Multiply (Square (Square (Subtract (Literal 1.0) (Variable "cos_theta")))) (Subtract (Literal 1.0) (Square (Divide (Subtract (Variable "n0") (Variable "n1")) (Add (Variable "n0") (Variable "n1")))))) (Square (Divide (Subtract (Variable "n0") (Variable "n1")) (Add (Variable "n0") (Variable "n1")))))
 """
 
 [<Literal>]

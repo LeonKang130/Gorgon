@@ -51,6 +51,8 @@ let rules = """
 ; Unary operation rules
 (rewrite (Multiply a a) (Square a))
 (rewrite (Multiply a (Inverse b)) (Divide a b))
+(rewrite (Multiply (Square a) (Square b)) (Square (Multiply a b)))
+(rewrite (Divide (Square a) (Square b)) (Square (Divide a b)))
 (rewrite (Multiply (Exponent a) (Exponent b)) (Exponent (Multiply a b)))
 ; Binary operation rules
 (rewrite (Add a b) (Add b a))
