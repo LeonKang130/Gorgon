@@ -40,7 +40,7 @@ translate optimized expressions output from the egglog DSL back into the shader 
 
 ### `Printer.fs` file
 
-This file translates the IR into the egglog DSL and includes relevant re-writing rules as well as the cost model for egglog to operate on. This is put in the file `dsl.txt`. This egglog DSL can then be input the egglog web application here: https://egraphs-good.github.io/egglog/. From here, an optimized re-written expression is produced using equality saturation. Unfortunately F# does not have egglog bindings, so until those are written, we use the website as a proof of concept.
+This file translates the IR into the egglog DSL and includes relevant re-writing rules as well as the cost model for egglog to operate on. This is written to an output file. This egglog DSL can then be input the egglog web application here: https://egraphs-good.github.io/egglog/. From here, an optimized re-written expression is produced using equality saturation. Unfortunately F# does not have egglog bindings, so until those are written, we use the website as a proof of concept.
 
 This outputted DSL is translated back into the shader language using functionality from the `Parser.fs` file.
 
