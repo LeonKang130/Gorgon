@@ -1,54 +1,67 @@
-# Installation and Execution
-Make sure to install .NET SDK 9.0 for your machine following the instructions here: https://learn.microsoft.com/en-us/dotnet/core/install/linux?WT.mc_id=dotnet-35129-website
+# Gorgon: Rewriting Shader Functions Using Equality Saturation
 
+## How to Build & Run
 
-Run `dotnet build` to build the project.
+This project is written in `F#` and tested on Windows 11. After cloning the repository, run `dotnet build` to download dependencies and build the project.
 
-Run `dotnet run ./Examples/slang/aces.slang ./aces.dsl` to translate `aces.slang` to egglog dsl in `aces.dsl`.
+>    Make sure to install .NET SDK 9.0 for your machine following the instructions here: https://learn.microsoft.com/en-us/dotnet/core/install/linux?WT.mc_id=dotnet-35129-website
 
-Run `dotnet run --dsl ./Examples/egg/aces.txt ./aces.slang` to translate the egglog dsl in `aces.txt` to slang in `aces.slang`.
+After successfully building the project, try run the following commands:
 
-Run `dotnet test` to see the results of our benchmarks.
+-   `dotnet run -- [--shader] ./Examples/slang/aces.slang ./aces.dsl`: translate `aces.slang` to `egglog` DSL script in `aces.dsl`
 
-We show an original shader function, then we show the re-written expression after
-eliminating common sub-expressions and constant folding, and then finally we show a function re-written with the help of equality saturation using egg.
+-   `dotnet run --dsl ./Examples/egg/aces.txt ./aces.slang`: translate the `egglog` DSL expression in `aces.txt` to `slang` in `aces.slang`
 
+-   `dotnet test`: show the results of our benchmarks, which includes the original shader function, the preprocessed version after common subexpression elimination and constant folding, and the rewritten version with a help of equality saturation using `egglog`
 
-# Benchmarks and pipeline of our codebase
+## Pipeline & Benchmarks
 
-The pipeline of our codebase is that it takes a .slang file as an input,
-translates it into an intermediate representation, performs common sub-expression removal and constant folding, then outputs the program in the egg dsl along with re-writing rules, and a cost model.
+Our project takes a function written in `slang` as input and outputs the optimized version based on a customizable cost model. Our pipeline is as follows:
 
-Then from there you take the outputted DSL and input it here: https://egraphs-good.github.io/egglog/
-from which you will get a further optimized re-write using egg's equality saturation. Because F# has no egglog bindings, we have to use the web version for now.
+1.   Parsing shader language into intermediate representation (IR)
 
-Then from there we can parse that DSL and output a new slang file.
+2.   Preprocessing IR by building an DAG and retrieving the nodes reachable from the root
 
-Our benchmarks are contained in the `Examples/` folder. The `slang/` folder contains the original unoptimized slang code. The `egg/` folder contains the DSL for each corresponding .slang file after our custom optimizations and egglog's equality saturation (gotten from the browser app).
+3.   Translating the IR into `egglog` DSL script accompanied with a set of rewrite rules
 
+4.   Using `egglog` to perform equality saturation and extracting the rewritten expression
 
-# Structure of codebase
+5.   Parsing the optimized expression in `egglog` DSL into IR
 
-### `Parser.fs` and `IR.fs` files
+6.   Postprocessing IR by once again building an DAG
 
-The `Parser.fs` file defines the parser rules for a shader language. We parse it into an intermediate representation in `IR.fs` where we also define a function that calculates the cost of the function based on a cost model we have defined. This allows us to plug in different cost models, key to the modularity requirement in the original problem.
+7.   Emit optimized shader function in `slang` from the DAG
 
-Additionally the `Parser.fs` file contains a parser for the egglog DSL language so that we can
-translate optimized expressions output from the egglog DSL back into the shader language.
+More details and examples of our pipeline can be found in `Test.fs`.
 
+>   Currently our pipeline is not fully automatic (since there is no binding for `egg` or `egglog` in .NET at the moment), so you need to use the output DSL script in *step 3* as the input for an independently deployed `egglog` (such as [the web demo](https://egraphs-good.github.io/egglog/)) and then input the extracted expression from `egglog` back to our application.
 
+Our benchmarks can be found in directory `Examples/`:
 
-### `Printer.fs` file
+-   `Examples/slang/` contains the original unoptimized slang code
+-   `Examples/egg/` contains the DSL for each corresponding `.slang` file after our custom optimizations and `egglog`'s equality saturation (gotten from the browser app)
 
-This file translates the IR into the egglog DSL and includes relevant re-writing rules as well as the cost model for egglog to operate on. This is written to an output file. This egglog DSL can then be input the egglog web application here: https://egraphs-good.github.io/egglog/. From here, an optimized re-written expression is produced using equality saturation. Unfortunately F# does not have egglog bindings, so until those are written, we use the website as a proof of concept.
+## Codebase Structure
 
-This outputted DSL is translated back into the shader language using functionality from the `Parser.fs` file.
+### Intermediate Representation (IR)
 
+Internally the shader functions are represented using an IR format defined in `IR.fs`. We also included a data structure denoting the weights (costs) assigned to each type of operation in the IR as well as a helper function to evaluate the total cost of a single function.
 
+### Parsing & Printing (I/O)
 
-### `CSE.fs` file
+Our pipeline relies on two parsers and two printers to enable the conversion from `slang` and `egglog` DSL to our IR and the other way around.
 
-This file does constant folding on the IR as well as eliminating duplicate terms. Both these procedures will reduce the operations in the source code, lowering the total cost of the function.
+>   See [this page](https://egglog-python.readthedocs.io/latest/reference/egglog-translation.html) for more details on the syntax of `egglog` DSL. More example scripts can be found at [the web demo](https://egraphs-good.github.io/egglog/) as well.
+
+The implementation of the parsers (based on `FParsec`) can be found in `Parser.fs` and the printers can be found in `Printer.fs`.
+
+### Common Subexpression Elimination & Constant Folding
+
+Before translating our IR to the DSL and the final optimized shader function, we perform pre and postprocessing by constructing an DAG based on the IR and recursively traversing the nodes reachable from the root (returned) expression.
+
+During this process, the parts of the DAG unreachable from the root (also known as "dead code") are culled off and subgraphs containing only constant literals are evaluated and merged into a single constant literal. Moreover, we rename each subexpression and make sure exactly one local bindings exists for of them, so that shared subexpressions in the DAG are computed only once.
+
+In this way, we are able to shrink the size of the e-graph handled by `egglog` and also eliminate the common subexpressions introduced by `egglog`. Details can be found in `CSE.fs`. 
 
 
 
